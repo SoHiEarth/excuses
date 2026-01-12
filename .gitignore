@@ -40,3 +40,9 @@ main
 
 # debug information files
 *.dwo
+
+# api key
+api_key.txt
+
+.cache/
+compile_commands.json
