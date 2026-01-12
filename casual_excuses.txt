@@ -1,0 +1,20 @@
+The dog ate my backend.
+My code works on my machine.
+I was debugging and accidentally pushed to production.
+I thought that feature was deprecated.
+I forgot to commit my changes.
+The server was down for maintenance.
+I was waiting for code review feedback.
+I misread the requirements.
+I was testing in production.
+There was a merge conflict I didn't notice.
+I accidentally deleted the database.
+The API documentation was unclear.
+I was working on a different branch.
+I forgot to set up the environment variables.
+I was trying to optimize the performance.
+I got distracted by a meeting.
+I was updating dependencies and something broke.
+I thought the issue was already resolved.
+I was on vacation and missed the deadline.
+I was multitasking and lost track of time.
