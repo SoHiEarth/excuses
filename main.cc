@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdlib>
 #include <fstream>
+#include <random>
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
 
@@ -29,13 +30,18 @@ std::map<style, std::map<purpose, std::vector<std::string>>> LoadExcuses() {
   std::map<style, std::map<purpose, std::vector<std::string>>> excuses;
   for (int s = CASUAL; s <= FORMAL; ++s) {
     for (int p = WORK; p <= OTHER; ++p) {
-      std::ifstream file(std::format("excuses_{}_{}.txt", style_map.at((style)s), purpose_map.at((purpose)p)));
+      auto filename = std::format("excuses_{}_{}.txt", style_map.at((style)s), purpose_map.at((purpose)p));
+      std::ifstream file(filename);
+      auto& excuse_list = excuses[static_cast<style>(s)][static_cast<purpose>(p)];
       if (!file.is_open()) {
-        throw std::runtime_error("Error: Could not open " + std::format("excuses_{}_{}.txt", style_map.at((style)s), purpose_map.at((purpose)p)));
+        throw std::runtime_error("Error: Could not open " + filename);
       }
       std::string line;
       while (std::getline(file, line)) {
-        excuses[static_cast<style>(s)][static_cast<purpose>(p)].push_back(line);
+        excuse_list.push_back(line);
+      }
+      if (excuse_list.empty()) {
+        throw std::runtime_error("Error: No excuses found in " + filename);
       }
     }
   }
@@ -43,7 +49,7 @@ std::map<style, std::map<purpose, std::vector<std::string>>> LoadExcuses() {
 }
 
 int main() {
-  std::cout << "Random Excuse Generator" << std::endl;
+  std::cout << "\e[1mRandom Excuse Generator\e[0m" << std::endl;
   std::map<style, std::map<purpose, std::vector<std::string>>> excuses;
   try {
     excuses = LoadExcuses();
@@ -53,6 +59,24 @@ int main() {
     config::ai_only = true;
   }
 
+  std::cout << "\e[1mWhat to do:\e[0m\n1. Make a random excuse\n2. View favorites\nChoose (1/2): ";
+  int choice;
+  std::cin >> choice;
+  if (choice == 2) {
+    std::ifstream fav_file("favorites.txt");
+    if (!fav_file.is_open()) {
+      std::cerr << "Failed to open favorites. Try making some excuses first" << std::endl;
+      return EXIT_SUCCESS;
+    }
+    std::string line;
+    std::cout << "\e[1mFavorite Excuses:\e[0m\n";
+    while (std::getline(fav_file, line)) {
+      std::cout << "- " << line << std::endl;
+    }
+    fav_file.close();
+    return EXIT_SUCCESS;
+  }
+
   int mode;
   if (!config::ai_only) {
     std::cout << "Mode (1: Casual, 2: Formal, 3: Consult AI): ";
@@ -60,32 +84,54 @@ int main() {
   } else {
     mode = 3;
   }
+
   std::cout << "Purpose (1: Work, 2: Social, 3: Other): ";
   int purpose;
   std::cin >> purpose;
+  
+  std::vector<std::string> selected_excuses;
   if (mode == 1) {
     if (purpose == WORK) {
-      std::cout << excuses[CASUAL][WORK].at(rand() % excuses[CASUAL].size()) << std::endl;
+      selected_excuses = excuses[CASUAL][WORK];
     } else if (purpose == SOCIAL) {
-      std::cout << excuses[CASUAL][SOCIAL].at(rand() % excuses[CASUAL].size()) << std::endl;
+      selected_excuses = excuses[CASUAL][SOCIAL];
     } else if (purpose == OTHER) {
-      std::cout << excuses[CASUAL][OTHER].at(rand() % excuses[CASUAL].size()) << std::endl;
+      selected_excuses = excuses[CASUAL][OTHER];
     } else {
       std::cout << "Invalid purpose selected." << std::endl;
     }
   } else if (mode == 2) {
     if (purpose == WORK) {
-      std::cout << excuses[FORMAL][WORK].at(rand() % excuses[FORMAL].size()) << std::endl;
+      selected_excuses =  excuses[FORMAL][WORK];
     } else if (purpose == SOCIAL) {
-      std::cout << excuses[FORMAL][SOCIAL].at(rand() % excuses[FORMAL].size()) << std::endl;
+      selected_excuses = excuses[FORMAL][SOCIAL];
     } else if (purpose == OTHER) {
-      std::cout << excuses[FORMAL][OTHER].at(rand() % excuses[FORMAL].size()) << std::endl;
+      selected_excuses = excuses[FORMAL][OTHER];
     } else {
       std::cout << "Invalid purpose selected." << std::endl;
     }
-  } else if (mode == 3) {
+  }
+  if (mode != 3) {
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<size_t> dist(0, selected_excuses.size() - 1);
+    auto random_excuse = selected_excuses.at(dist(rng));
+    std::cout << random_excuse << std::endl;
+    std::cout << "Add to favorites? (y/n): ";
+    char fav_choice;
+    std::cin >> fav_choice;
+    if (fav_choice == 'y' || fav_choice == 'Y') {
+      std::ofstream fav_file("favorites.txt", std::ios::app);
+      if (fav_file.is_open()) {
+        fav_file << random_excuse << std::endl;
+        fav_file.close();
+      } else {
+        std::cerr << "Error: Could not open favorites.txt" << std::endl;
+      }
+    }
+  }
+
+  if (mode == 3) {
     std::cout << "Consulting AI for an excuse..." << std::endl;
-    // Contact ChatGPT API
     std::ifstream api_key_file("api_key.txt");
     if (!api_key_file.is_open()) {
       std::cerr << "Error: Could not open api_key.txt" << std::endl;
@@ -104,7 +150,7 @@ int main() {
       headers = curl_slist_append(headers, "Content-Type: application/json");
       nlohmann::json j;
       j["model"] = "gpt-4.1-mini";
-      j["input"] = "Give me a random excuse for not completing my work. Do not add any extra explanations. Just give me the excuse plz.";
+      j["input"] = "Generate a random excuse for not completing my work. Do not add any extra explanations. The purpose is " + purpose_map.at(static_cast<enum purpose>(purpose)) + ".";
       std::string json_str = j.dump();
       curl_easy_setopt(curl, CURLOPT_URL, "https://api.openai.com/v1/responses");
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -117,8 +163,7 @@ int main() {
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
       res = curl_easy_perform(curl);
       if (res != CURLE_OK) {
-        std::cerr << "curl_easy_perform() failed: "
-                  << curl_easy_strerror(res) << std::endl;
+        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
       } else {
         auto response_json = nlohmann::json::parse(response_string);
         std::string ai_text;
@@ -141,8 +186,6 @@ int main() {
       curl_easy_cleanup(curl);
     }
     curl_global_cleanup();
-  } else {
-    std::cout << "Invalid mode selected." << std::endl;
   }
   return EXIT_SUCCESS;
 }
