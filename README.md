@@ -3,8 +3,8 @@
 A simple CLI tool that generates random excuses for various situations.
 ### Features
 - Generate excuses from two categories and three purposes: 
-  - Categories: Personal, Work
-  - Purposes: Late, Absent, Incomplete
+  - Categories: Casual, Formal
+  - Purposes: Work, Social, Other
 ![Category and Purpose Screenshot](docs/category_purpose.png)
 - Easy to use command-line interface
 ![CLI Home Screenshot](docs/cli_home.png)
