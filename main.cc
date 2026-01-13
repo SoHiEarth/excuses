@@ -6,33 +6,78 @@
 #include <random>
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
+#include <map>
+#include <format>
+#include <ctime>
 
-enum style { CASUAL = 1, FORMAL = 2, AI = 3 };
-enum purpose { WORK = 1, SOCIAL = 2, OTHER = 3 };
-
-const std::map<style, std::string> style_map = {
-  {CASUAL, "casual"},
-  {FORMAL, "formal"},
-  {AI, "ai"}
+enum class Style : int {
+  CASUAL = 1,
+  FORMAL = 2,
+  AI = 3
 };
 
-const std::map<purpose, std::string> purpose_map = {
-  {WORK, "work"},
-  {SOCIAL, "social"},
-  {OTHER, "other"}
+enum class Purpose : int {
+  WORK = 1,
+  SOCIAL = 2,
+  OTHER = 3
+};
+
+constexpr Style styles[] = {Style::CASUAL, Style::FORMAL};
+
+constexpr Purpose purposes[] = {Purpose::WORK, Purpose::SOCIAL, Purpose::OTHER};
+
+const std::map<Style, std::string> style_map = {
+  {Style::CASUAL, "casual"},
+  {Style::FORMAL, "formal"},
+  {Style::AI, "ai"}
+};
+
+const std::map<Purpose, std::string> purpose_map = {
+  {Purpose::WORK, "work"},
+  {Purpose::SOCIAL, "social"},
+  {Purpose::OTHER, "other"}
 };
 
 namespace config {
 bool ai_only = false;
+bool incognito = false;
 }
 
-std::map<style, std::map<purpose, std::vector<std::string>>> LoadExcuses() {
-  std::map<style, std::map<purpose, std::vector<std::string>>> excuses;
-  for (int s = CASUAL; s <= FORMAL; ++s) {
-    for (int p = WORK; p <= OTHER; ++p) {
-      auto filename = std::format("excuses_{}_{}.txt", style_map.at((style)s), purpose_map.at((purpose)p));
+void AddToHistory(std::string_view excuse) {
+  if (config::incognito) return;
+  std::ofstream history_file("history.txt", std::ios::app);
+  if (history_file.is_open()) {
+    // Get current time
+    std::time_t now = std::time(nullptr);
+    history_file << now  << ": " << excuse << std::endl;
+    history_file.close();
+  } else {
+    std::cerr << "Error: Could not open history.txt" << std::endl;
+  }
+}
+
+void AskIfFavorite(std::string_view excuse) {
+  std::cout << "Add to favorites? (y/n): ";
+  char fav_choice;
+  std::cin >> fav_choice;
+  if (fav_choice == 'y' || fav_choice == 'Y') {
+    std::ofstream fav_file("favorites.txt", std::ios::app);
+    if (fav_file.is_open()) {
+      fav_file << excuse << std::endl;
+      fav_file.close();
+    } else {
+      std::cerr << "Error: Could not open favorites.txt" << std::endl;
+    }
+  }
+}
+
+std::map<Style, std::map<Purpose, std::vector<std::string>>> LoadExcuses() {
+  std::map<Style, std::map<Purpose, std::vector<std::string>>> excuses;
+  for (auto s : styles) {
+    for (auto p : purposes) {
+      auto filename = std::format("excuses_{}_{}.txt", style_map.at((Style)s), purpose_map.at((Purpose)p));
       std::ifstream file(filename);
-      auto& excuse_list = excuses[static_cast<style>(s)][static_cast<purpose>(p)];
+      auto& excuse_list = excuses[static_cast<Style>(s)][static_cast<Purpose>(p)];
       if (!file.is_open()) {
         throw std::runtime_error("Error: Could not open " + filename);
       }
@@ -48,9 +93,48 @@ std::map<style, std::map<purpose, std::vector<std::string>>> LoadExcuses() {
   return excuses;
 }
 
-int main() {
-  std::cout << "\e[1mRandom Excuse Generator\e[0m" << std::endl;
-  std::map<style, std::map<purpose, std::vector<std::string>>> excuses;
+void InitialSetup() {
+  std::cout << "Welcome to Excuses! It seems this is your first time running the program." << std::endl;
+  std::cout << "To get started, please enter your OpenAI API key (you can get one from https://platform.openai.com/account/api-keys)\n";
+  std::cout << "This step is totally optional, but it will allow you to generate AI-based excuses." << std::endl;
+  std::cout << "Enter your API key (or leave blank to skip): ";
+  std::string api_key;
+  std::getline(std::cin, api_key);
+  if (!api_key.empty()) {
+    std::ofstream api_key_file("api_key.txt");
+    if (api_key_file.is_open()) {
+      api_key_file << api_key << std::endl;
+      api_key_file.close();
+      std::cout << "API key saved successfully!" << std::endl;
+    } else {
+      std::cerr << "Error: Could not save API key." << std::endl;
+    }
+  }
+
+  if (!std::filesystem::exists("first_run.log")) {
+    std::ofstream first_run_file("first_run.log");
+    if (!first_run_file.is_open()) {
+      first_run_file << "This file indicates that the initial setup has been completed." << std::endl;
+    }
+    first_run_file.close();
+  }
+}
+
+int main(int argc, char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--ai-only") {
+      config::ai_only = true;
+    } else if (arg == "--incognito") {
+      config::incognito = true;
+    }
+  }
+
+  std::cout << "\e[1mExcuses\t\e[0m\e[3mThe Random Excuse Generator\e[0m" << std::endl;
+  if (config::incognito) {
+    std::cout << "\e[3mIncognito Mode Enabled: History will not be saved.\e[0m" << std::endl;
+  }
+  std::map<Style, std::map<Purpose, std::vector<std::string>>> excuses;
   try {
     excuses = LoadExcuses();
   }
@@ -59,7 +143,12 @@ int main() {
     config::ai_only = true;
   }
 
-  std::cout << "\e[1mWhat to do:\e[0m\n1. Make a random excuse\n2. View favorites\nChoose (1/2): ";
+  if (!std::filesystem::exists("first_run.log")) {
+    InitialSetup();
+  }
+
+  while (true) {
+  std::cout << "\e[1mWhat to do:\e[0m\n1. Make a random excuse\n2. View favorites\n3. View History\n4. Info\n(1/2/3/4): ";
   int choice;
   std::cin >> choice;
   if (choice == 2) {
@@ -71,66 +160,64 @@ int main() {
     std::string line;
     std::cout << "\e[1mFavorite Excuses:\e[0m\n";
     while (std::getline(fav_file, line)) {
-      std::cout << "- " << line << std::endl;
+      std::cout << "- \e[3m" << line << "\e[0m" << std::endl;
     }
     fav_file.close();
     return EXIT_SUCCESS;
+  } else if (choice == 3) {
+    std::ifstream history_file("history.txt");
+    if (!history_file.is_open()) {
+      std::cerr << "Failed to open history. Try making some excuses first" << std::endl;
+      return EXIT_SUCCESS;
+    }
+    std::string line;
+    std::cout << "\e[1mExcuse History:\e[0m\n";
+    while (std::getline(history_file, line)) {
+      // parse timestamp
+      auto colon_pos = line.find(": ");
+      if (colon_pos != std::string::npos) {
+        std::string timestamp_str = line.substr(0, colon_pos);
+        std::time_t timestamp = std::stoll(timestamp_str);
+        std::tm* tm_ptr = std::localtime(&timestamp);
+        char time_buf[20];
+        std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", tm_ptr);
+        std::cout << "[" << time_buf << "] ";
+        line = line.substr(colon_pos + 2);
+      }
+      std::cout << "\e[3m" << line << "\e[0m" << std::endl;
+    }
+    history_file.close();
+    return EXIT_SUCCESS;
+  } else if (choice == 4) {
+    std::cout << "\e[1mExcuses\e[0m - The Random Excuse Generator\n";
+    std::cout << "\e[1mArguments\e[0m\n- --ai-only: Only use AI to generate excuses\n- --incognito: Do not save history of generated excuses\n";
+    std::cout << "Check out the project on GitHub for more info: \e[4mhttps://github.com/sohiearth/excuses\e[0m" << std::endl;
+    return EXIT_SUCCESS;
   }
 
-  int mode;
+  Style mode = Style::CASUAL;
   if (!config::ai_only) {
-    std::cout << "Mode (1: Casual, 2: Formal, 3: Consult AI): ";
-    std::cin >> mode;
+    std::cout << "Mode\n1: Casual\n2: Formal\n3: Consult AI\n(1/2/3): ";
+    mode = static_cast<Style>(std::cin >> choice, choice);
   } else {
-    mode = 3;
+    mode = Style::AI;
   }
 
-  std::cout << "Purpose (1: Work, 2: Social, 3: Other): ";
-  int purpose;
-  std::cin >> purpose;
+  Purpose purpose = Purpose::WORK;
+  std::cout << "Purpose\n1: Work\n2: Social\n3: Other\n(1/2/3): ";
+  purpose = static_cast<Purpose>(std::cin >> choice, choice);
   
-  std::vector<std::string> selected_excuses;
-  if (mode == 1) {
-    if (purpose == WORK) {
-      selected_excuses = excuses[CASUAL][WORK];
-    } else if (purpose == SOCIAL) {
-      selected_excuses = excuses[CASUAL][SOCIAL];
-    } else if (purpose == OTHER) {
-      selected_excuses = excuses[CASUAL][OTHER];
-    } else {
-      std::cout << "Invalid purpose selected." << std::endl;
-    }
-  } else if (mode == 2) {
-    if (purpose == WORK) {
-      selected_excuses =  excuses[FORMAL][WORK];
-    } else if (purpose == SOCIAL) {
-      selected_excuses = excuses[FORMAL][SOCIAL];
-    } else if (purpose == OTHER) {
-      selected_excuses = excuses[FORMAL][OTHER];
-    } else {
-      std::cout << "Invalid purpose selected." << std::endl;
-    }
-  }
-  if (mode != 3) {
+  if (mode != Style::AI) {
+    std::vector<std::string> selected_excuses = excuses.at(mode).at(purpose);
     std::mt19937 rng(std::random_device{}());
     std::uniform_int_distribution<size_t> dist(0, selected_excuses.size() - 1);
     auto random_excuse = selected_excuses.at(dist(rng));
-    std::cout << random_excuse << std::endl;
-    std::cout << "Add to favorites? (y/n): ";
-    char fav_choice;
-    std::cin >> fav_choice;
-    if (fav_choice == 'y' || fav_choice == 'Y') {
-      std::ofstream fav_file("favorites.txt", std::ios::app);
-      if (fav_file.is_open()) {
-        fav_file << random_excuse << std::endl;
-        fav_file.close();
-      } else {
-        std::cerr << "Error: Could not open favorites.txt" << std::endl;
-      }
-    }
+    std::cout << "\e[3m" << random_excuse << "\e[0m" << std::endl;
+    AddToHistory(random_excuse);
+    AskIfFavorite(random_excuse); 
   }
 
-  if (mode == 3) {
+  if (mode == Style::AI) {
     std::cout << "Consulting AI for an excuse..." << std::endl;
     std::ifstream api_key_file("api_key.txt");
     if (!api_key_file.is_open()) {
@@ -150,7 +237,11 @@ int main() {
       headers = curl_slist_append(headers, "Content-Type: application/json");
       nlohmann::json j;
       j["model"] = "gpt-4.1-mini";
-      j["input"] = "Generate a random excuse for not completing my work. Do not add any extra explanations. The purpose is " + purpose_map.at(static_cast<enum purpose>(purpose)) + ".";
+      j["input"] = std::format(
+        "Generate a {} excuse for a {} situation. No explanation.",
+        style_map.at(mode),
+        purpose_map.at(purpose)
+      );
       std::string json_str = j.dump();
       curl_easy_setopt(curl, CURLOPT_URL, "https://api.openai.com/v1/responses");
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -177,7 +268,9 @@ int main() {
         }
       }
       if (!ai_text.empty()) {
-        std::cout << ai_text << "\n";
+        std::cout << "\e[3m" << ai_text << "\e[0m" << "\n";\
+        AddToHistory(ai_text);
+        AskIfFavorite(ai_text);
       } else {
         std::cerr << "No text output found.\n";
       }
@@ -187,5 +280,13 @@ int main() {
     }
     curl_global_cleanup();
   }
+  std::cout << "Do you want to make another excuse? (y/n): ";
+  char again_choice;
+  std::cin >> again_choice;
+  if (again_choice != 'y' && again_choice != 'Y') {
+    break;
+  }
+  }
+
   return EXIT_SUCCESS;
 }

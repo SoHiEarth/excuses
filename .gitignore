@@ -47,3 +47,5 @@ api_key.txt
 .cache/
 compile_commands.json
 favorites.txt
+history.txt
+first_run.log
