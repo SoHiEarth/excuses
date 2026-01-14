@@ -22,9 +22,16 @@ enum class Purpose : int {
   OTHER = 3
 };
 
-constexpr Style styles[] = {Style::CASUAL, Style::FORMAL};
+constexpr Style styles[] = {
+  Style::CASUAL,
+  Style::FORMAL
+};
 
-constexpr Purpose purposes[] = {Purpose::WORK, Purpose::SOCIAL, Purpose::OTHER};
+constexpr Purpose purposes[] = {
+  Purpose::WORK,
+  Purpose::SOCIAL,
+  Purpose::OTHER
+};
 
 const std::map<Style, std::string> style_map = {
   {Style::CASUAL, "casual"},
@@ -41,18 +48,23 @@ const std::map<Purpose, std::string> purpose_map = {
 namespace config {
 bool ai_only = false;
 bool incognito = false;
+const std::string first_run_filename = "first_run.log";
+const std::string api_key_filename = "api_key.txt";
+const std::string history_filename = "history.txt";
+const std::string favorites_filename = "favorites.txt";
+const std::string ai_only_argument = "--ai-only";
+const std::string incognito_argument = "--incognito";
 }
 
 void AddToHistory(std::string_view excuse) {
   if (config::incognito) return;
-  std::ofstream history_file("history.txt", std::ios::app);
+  std::ofstream history_file(config::history_filename, std::ios::app);
   if (history_file.is_open()) {
-    // Get current time
     std::time_t now = std::time(nullptr);
     history_file << now  << ": " << excuse << std::endl;
     history_file.close();
   } else {
-    std::cerr << "Error: Could not open history.txt" << std::endl;
+    std::cerr << "Error: Could not open " << config::history_filename << std::endl;
   }
 }
 
@@ -61,12 +73,12 @@ void AskIfFavorite(std::string_view excuse) {
   char fav_choice;
   std::cin >> fav_choice;
   if (fav_choice == 'y' || fav_choice == 'Y') {
-    std::ofstream fav_file("favorites.txt", std::ios::app);
+    std::ofstream fav_file(config::favorites_filename, std::ios::app);
     if (fav_file.is_open()) {
       fav_file << excuse << std::endl;
       fav_file.close();
     } else {
-      std::cerr << "Error: Could not open favorites.txt" << std::endl;
+      std::cerr << "Error: Could not open " << config::favorites_filename << std::endl;
     }
   }
 }
@@ -101,7 +113,7 @@ void InitialSetup() {
   std::string api_key;
   std::getline(std::cin, api_key);
   if (!api_key.empty()) {
-    std::ofstream api_key_file("api_key.txt");
+    std::ofstream api_key_file(config::api_key_filename);
     if (api_key_file.is_open()) {
       api_key_file << api_key << std::endl;
       api_key_file.close();
@@ -111,8 +123,8 @@ void InitialSetup() {
     }
   }
 
-  if (!std::filesystem::exists("first_run.log")) {
-    std::ofstream first_run_file("first_run.log");
+  if (!std::filesystem::exists(config::first_run_filename)) {
+    std::ofstream first_run_file(config::first_run_filename);
     if (!first_run_file.is_open()) {
       first_run_file << "This file indicates that the initial setup has been completed." << std::endl;
     }
@@ -123,9 +135,9 @@ void InitialSetup() {
 int main(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
-    if (arg == "--ai-only") {
+    if (arg == config::ai_only_argument) {
       config::ai_only = true;
-    } else if (arg == "--incognito") {
+    } else if (arg == config::incognito_argument) {
       config::incognito = true;
     }
   }
@@ -143,7 +155,7 @@ int main(int argc, char* argv[]) {
     config::ai_only = true;
   }
 
-  if (!std::filesystem::exists("first_run.log")) {
+  if (!std::filesystem::exists(config::first_run_filename)) {
     InitialSetup();
   }
 
@@ -152,7 +164,7 @@ int main(int argc, char* argv[]) {
   int choice;
   std::cin >> choice;
   if (choice == 2) {
-    std::ifstream fav_file("favorites.txt");
+    std::ifstream fav_file(config::favorites_filename);
     if (!fav_file.is_open()) {
       std::cerr << "Failed to open favorites. Try making some excuses first" << std::endl;
       return EXIT_SUCCESS;
@@ -165,7 +177,7 @@ int main(int argc, char* argv[]) {
     fav_file.close();
     return EXIT_SUCCESS;
   } else if (choice == 3) {
-    std::ifstream history_file("history.txt");
+    std::ifstream history_file(config::history_filename);
     if (!history_file.is_open()) {
       std::cerr << "Failed to open history. Try making some excuses first" << std::endl;
       return EXIT_SUCCESS;
@@ -189,8 +201,8 @@ int main(int argc, char* argv[]) {
     history_file.close();
     return EXIT_SUCCESS;
   } else if (choice == 4) {
-    std::cout << "\e[1mExcuses\e[0m - The Random Excuse Generator\n";
-    std::cout << "\e[1mArguments\e[0m\n- --ai-only: Only use AI to generate excuses\n- --incognito: Do not save history of generated excuses\n";
+    std::cout << "\e[1mExcuses\e[0m\e[3m The Random Excuse Generator\e[0m\n";
+    std::cout << "\e[1mArguments\e[0m\n- " << config::ai_only_argument << ": Only use AI to generate excuses\n- " << config::incognito_argument << ": Do not save history of generated excuses\n";
     std::cout << "Check out the project on GitHub for more info: \e[4mhttps://github.com/sohiearth/excuses\e[0m" << std::endl;
     return EXIT_SUCCESS;
   }
@@ -219,9 +231,9 @@ int main(int argc, char* argv[]) {
 
   if (mode == Style::AI) {
     std::cout << "Consulting AI for an excuse..." << std::endl;
-    std::ifstream api_key_file("api_key.txt");
+    std::ifstream api_key_file(config::api_key_filename);
     if (!api_key_file.is_open()) {
-      std::cerr << "Error: Could not open api_key.txt" << std::endl;
+      std::cerr << "Error: Could not open " << config::api_key_filename << std::endl;
       return EXIT_FAILURE;
     }
     std::string api_key;
@@ -238,8 +250,7 @@ int main(int argc, char* argv[]) {
       nlohmann::json j;
       j["model"] = "gpt-4.1-mini";
       j["input"] = std::format(
-        "Generate a {} excuse for a {} situation. No explanation.",
-        style_map.at(mode),
+        "Generate an excuse for a {} situation. No explanation.",
         purpose_map.at(purpose)
       );
       std::string json_str = j.dump();
